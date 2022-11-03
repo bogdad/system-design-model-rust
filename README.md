@@ -5,7 +5,8 @@ Simulating queue theory models of distributed systems.
 Inspired by lethain systems thinking toolkit https://github.com/lethain/systems
 but targeted at distributed systems properties, i.e. queues / requests / responses / servers / loadbalancers / etc. And also in rust.
 
-Developer creates a description of the system in rust dsl, then scheduler simulates it for a time interval, collecting metrics.
+Create a description of the distributed system in rust dsl, use scheduler to simulate passage of time, record metrics.
+Then compare simulated results to actual prometheus/grafana to test which assumptions do not hold.
 
 Dsl looks conceptually like this:
 
