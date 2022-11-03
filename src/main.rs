@@ -309,10 +309,19 @@ use std::collections::VecDeque;
 struct Scheduler {
     heap: BinaryHeap<SchedulerElement>,
     cur_t: i64,
-    executed: i64,
+    executed: Counter,
 }
 
 impl Scheduler {
+
+    fn new() -> Self {
+        let binary_heap = BinaryHeap::<SchedulerElement>::new();
+        Scheduler {
+            heap: binary_heap,
+            cur_t: 0,
+            executed: Counter::new(),
+        }
+    }
 
     fn schedule(&mut self, world: &mut World, emitter: SystemRef) {
         world.with_system(emitter, |system, world|{
@@ -326,7 +335,7 @@ impl Scheduler {
     fn execute_next(&mut self, world: &mut World, up_to_nano: i64) -> bool {
         let top = self.heap.pop();
         if let Some(top) = top {
-            self.executed += 1;
+            self.executed.inc();
             let ee = top.e;
             self.cur_t = top.t;
             if self.cur_t > up_to_nano {
@@ -351,6 +360,11 @@ impl Scheduler {
     }
 }
 
+impl StatEmitter for Scheduler {
+    fn stats(&self) -> String {
+        format!("executed {}", self.executed.stats())
+    }
+}
 
 fn main() {
 
@@ -367,19 +381,14 @@ fn main() {
     let ar = ArrivalSource::new( Poisson::<f64>::new(1_000.0).unwrap(), server_ref);
     let ar_ref = world.add(System::ArrivalSource(ar));
     
-    let binary_heap = BinaryHeap::<SchedulerElement>::new();
-    let mut scheduler = Scheduler {
-        heap: binary_heap,
-        cur_t: 0,
-        executed: 0,
-    };
+    let mut scheduler = Scheduler::new();
 
     scheduler.schedule(&mut world, ar_ref);
 
     while scheduler.execute_next(&mut world, up_to_nano) {
 
     }
-    println!("executed {}", tostring(scheduler.executed));
+    println!("executed {}", scheduler.stats());
     
     
     world.with_system(ar_ref, |ar, _w|{println!("ar {}", ar.stats());});

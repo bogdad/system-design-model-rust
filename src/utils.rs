@@ -7,7 +7,8 @@ pub fn tostring<T: ToFormattedString>(arg: T) -> String {
 pub fn tostringfloat(arg: f64) -> String {
     let f = arg.floor();
     let rest = arg - f;
-    format!("{}{:.3}", tostring((f as i64)/10), rest)
+    let rst = format!("{:.3}", rest);
+    format!("{}{}", tostring((f as i64)), rst[1..].to_string())
 }
 
 pub struct Meter {
@@ -29,7 +30,7 @@ impl Meter {
         if self.co == 0 {
             "0".to_string()
         } else {
-            tostringfloat(self.sm as f64 /self.co as f64)
+            tostringfloat(self.sm as f64 / self.co as f64)
         }
     }
 }
