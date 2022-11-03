@@ -1,6 +1,6 @@
 # System design models in rust.
 
-Build queue models of distributed systems.
+Simulating queue theory models of distributed systems.
 
 Inspired by lethain systems thinking toolkit https://github.com/lethain/systems
 but targeted at distributed systems properties, i.e. queues / requests / responses / servers / loadbalancers / etc. And also in rust.
