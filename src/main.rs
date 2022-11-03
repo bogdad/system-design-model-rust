@@ -271,10 +271,6 @@ impl World {
         r
     }
 
-    /*fn get_mut(&mut self, system_ref: SystemRef) -> Option<&mut System>{
-        self.systems.get_mut(system_ref)
-    }*/
-
     fn split(&mut self, system_ref: SystemRef) -> (System, World) {
         let mut unset = System::Unset;
         std::mem::swap(&mut unset, self.systems.get_mut(system_ref).unwrap());
