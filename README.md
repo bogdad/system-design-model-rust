@@ -13,7 +13,7 @@ Dsl looks conceptually like this:
 ```
 ArrivalSource { 
 	delay: Poisson(1µs), 
-	sink: LoadBalancer{
+	sink: LoadBalancer {
 		servers: [
 			Server { delay:  Poisson(10µs), sink: out},
 			Server { delay:  Poisson(10µs), sink: out},
