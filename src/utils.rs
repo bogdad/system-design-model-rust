@@ -8,7 +8,7 @@ pub fn tostringfloat(arg: f64) -> String {
     let f = arg.floor();
     let rest = arg - f;
     let rst = format!("{:.3}", rest);
-    format!("{}{}", tostring((f as i64)), rst[1..].to_string())
+    format!("{}{}", tostring(f as i64), rst[1..].to_string())
 }
 
 pub struct Meter {
