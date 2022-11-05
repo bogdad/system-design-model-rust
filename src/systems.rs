@@ -58,8 +58,8 @@ impl<'a> Emmitter for ArrivalSource {
         let next_time = scheduler.get_cur_t() +  diff;
         self.meter.inc(diff);
 
-        world.with_system(self.sink, |system, _world|{
-            system.next(scheduler);
+        world.with_system(self.sink, |system, world|{
+            system.next(world, scheduler);
         });
         Some(next_time as i64)
     }
@@ -83,7 +83,7 @@ impl WorldMember for EndSink {
 
 impl Sink for EndSink {
 
-    fn next(&mut self, _scheduler: &mut Scheduler) {
+    fn next(&mut self, _world: &mut World, _scheduler: &mut Scheduler) {
         self.ticks += 1;
     }
 }
@@ -104,14 +104,14 @@ impl<'a> Emmitter for Server {
     fn tick(&mut self, world: &mut World, scheduler: &mut Scheduler) -> Option<i64> {
         let _ob = self.queue.front().cloned();
         self.queue.pop_front();
-        world.with_system(self.sink, |system, _world|{system.next(scheduler)});
+        world.with_system(self.sink, |system, world|{system.next(world, scheduler)});
         let _nb = self.queue.front();
         self.queue.front().cloned()
     }
 }
 
 impl Sink for Server {
-    fn next(&mut self, scheduler: &mut Scheduler) {
+    fn next(&mut self, _world: &mut World, scheduler: &mut Scheduler) {
         let next_time = (self.distribution.sample(&mut rand::thread_rng())) as i64;
         if self.queue.is_empty() {
             let nt = scheduler.get_cur_t() + next_time;
@@ -128,18 +128,50 @@ impl Sink for Server {
     }
 }
 
-/*struct LoadBalancer {
-    source: Box<dyn Source>,
-    sinks: Vec<Box<dyn Sink>>,
+/// Loadbalancer distributes incoming requests across a series of sinks.
+/// Currenly it does not have a queue of its own.
+pub struct LoadBalancer {
+    sinks: Vec<SystemRef>,
+    sr: Option<SystemRef>,
+    counter: Counter,
+    cur: usize,
 }
 
-impl Emmitter for LoadBalancer {
-    fn next_time(&mut self) -> Option<i64> { todo!() }
-    fn tick(&mut self, _: &mut Scheduler<'_>) { todo!() }
+impl LoadBalancer {
+    pub fn new(sinks: Vec<SystemRef>) -> Self {
+        assert!(sinks.len() > 0);
+        LoadBalancer { sinks, sr: None, counter: Counter::new(), cur: 0 }
+    }
 }
-impl Source for LoadBalancer {
+
+impl WorldMember for LoadBalancer {
+    fn add(&mut self, system_ref: SystemRef) {
+        self.sr = Some(system_ref);
+    }
+
+    fn getref(&self) -> Option<SystemRef> {
+        self.sr
+    }
 }
-*/
+
+impl Sink for LoadBalancer {
+    fn next(&mut self, world: &mut World, scheduler: &mut Scheduler) {
+        let next_sink_ref = self.sinks[self.cur];
+        world.with_system(next_sink_ref, |system, world| {
+            system.next(world, scheduler);
+        });
+        self.cur += 1;
+        self.cur %= self.sinks.len();
+        self.counter.inc();
+    }
+}
+
+impl StatEmitter for LoadBalancer {
+    fn stats(&self) -> String {
+        format!("lb incoming {}", self.counter.stats())
+    }
+}
+
 
 use std::collections::VecDeque;
 pub struct Server {
@@ -177,6 +209,7 @@ pub enum System {
     EndSink(EndSink),
     Server(Server),
     ArrivalSource(ArrivalSource),
+    LoadBalancer(LoadBalancer),
 }
 
 impl System {
@@ -186,15 +219,17 @@ impl System {
             System::Server(server) => server.tick(world, scheduler),
             System::ArrivalSource(ars) => ars.tick(world, scheduler),
             System::Unset => unimplemented!(),
+            System::LoadBalancer(_lb) => unimplemented!(),
         }
     }
 
-    pub fn next(&mut self, scheduler: &mut Scheduler) {
+    pub fn next(&mut self, world: &mut World, scheduler: &mut Scheduler) {
             match self {
-                System::EndSink(es) => es.next(scheduler),
-                System::Server(sr) => sr.next(scheduler),
+                System::EndSink(es) => es.next(world, scheduler),
+                System::Server(sr) => sr.next(world, scheduler),
                 System::ArrivalSource(_ars) => unimplemented!(),
                 System::Unset => unimplemented!(),
+                System::LoadBalancer(lb) => lb.next(world, scheduler),
             }
     }
 }
@@ -206,6 +241,7 @@ impl StatEmitter for System {
             System::Server(sr) => sr.stats(),
             System::ArrivalSource(asr) => asr.stats(),
             System::Unset => unimplemented!(),
+            System::LoadBalancer(lb) => lb.stats(),
         }
     }
 }
@@ -217,6 +253,7 @@ impl WorldMember for System {
             System::Server(sv) => sv.add(system_ref),
             System::ArrivalSource(arrival_source) => arrival_source.add(system_ref),
             System::Unset => unimplemented!(),
+            System::LoadBalancer(lb) => lb.add(system_ref),
         }
     }
 
@@ -226,6 +263,7 @@ impl WorldMember for System {
             System::Server(_) => todo!(),
             System::ArrivalSource(ars) => ars.getref(),
             System::Unset => unimplemented!(),
+            System::LoadBalancer(lb) => lb.getref(),
         }
     }
 }

@@ -14,7 +14,7 @@ pub trait Emmitter {
 }
 
 pub trait Sink {
-    fn next(&mut self, scheduler: &mut Scheduler);
+    fn next(&mut self, world: &mut World, scheduler: &mut Scheduler);
 }
 
 pub trait StatEmitter {
