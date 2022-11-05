@@ -1,4 +1,4 @@
-use crate::traits::{SystemRef, StatEmitter, WorldMember};
+use crate::traits::{SystemRef, StatEmitter, WorldMember, HasQueue};
 use crate::systems::System;
 
 pub struct World {
@@ -34,6 +34,16 @@ impl World {
             systems: nsystems
         };
         (unset, nw)
+    }
+}
+
+impl HasQueue for World {
+    fn queue_size(&self) -> i64 {
+        let mut qs = 0;
+        for system in &self.systems {
+            qs += system.queue_size();
+        }
+        qs
     }
 }
 

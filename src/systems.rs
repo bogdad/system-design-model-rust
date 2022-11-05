@@ -1,6 +1,6 @@
 
 use crate::objects::{Scheduler, World};
-use crate::traits::{SystemRef, StatEmitter, Emmitter, WorldMember, Sink};
+use crate::traits::{SystemRef, StatEmitter, Emmitter, WorldMember, Sink, HasQueue};
 use crate::utils::{Counter, Meter, tostring};
 
 use rand_distr::Distribution;
@@ -202,6 +202,11 @@ impl StatEmitter for Server {
     }
 }
 
+impl HasQueue for Server {
+    fn queue_size(&self) -> i64 {
+        self.queue.len() as i64
+    }
+}
 
 
 pub enum System {
@@ -231,6 +236,16 @@ impl System {
                 System::Unset => unimplemented!(),
                 System::LoadBalancer(lb) => lb.next(world, scheduler),
             }
+    }
+
+    pub fn queue_size(&self) -> i64 {
+        match self {
+            System::Unset => 0,
+            System::EndSink(_) => 0,
+            System::Server(s) => s.queue_size(),
+            System::ArrivalSource(_) => 0,
+            System::LoadBalancer(_) => 0,
+        }
     }
 }
 

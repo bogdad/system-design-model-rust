@@ -7,7 +7,8 @@ extern crate rand;
 
 use crate::objects::{World, Scheduler};
 use crate::systems::{ArrivalSource, Server, EndSink, LoadBalancer, System};
-use crate::traits::StatEmitter;
+use crate::traits::{StatEmitter, HasQueue};
+use crate::utils::tostring;
 
 use rand_distr::Poisson;
 
@@ -47,4 +48,6 @@ fn main() {
     world.with_system(server2_ref, |server, _w| println!("server2 {}", server.stats()) );
     world.with_system(load_balancer_ref, |load_balancer, _w| println!("load balaner {}", load_balancer.stats()) );
     world.with_system(endsink_ref, |endsink, _w| println!("endsink {}", endsink.stats()) );
+
+    println!("requests in the system {}", tostring(world.queue_size()));
 }

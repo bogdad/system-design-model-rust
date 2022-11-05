@@ -20,3 +20,7 @@ pub trait Sink {
 pub trait StatEmitter {
     fn stats(&self) -> String;
 }
+
+pub trait HasQueue {
+    fn queue_size(&self) -> i64;
+}
