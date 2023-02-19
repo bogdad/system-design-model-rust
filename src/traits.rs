@@ -5,7 +5,7 @@ use crate::objects::World;
 
 
 pub trait WorldMember {
-    fn add(&mut self, system_ref: SystemRef);
+    fn add(&mut self, system_ref: SystemRef, name: String);
     fn getref(&self) -> Option<SystemRef>;
 }
 

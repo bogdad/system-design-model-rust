@@ -1,6 +1,8 @@
 use crate::traits::{SystemRef, StatEmitter, WorldMember, HasQueue};
 use crate::systems::System;
 
+use crate::influxdbreporter::InfluxDbReporter;
+
 pub struct World {
     systems: Vec<System>,
 }
@@ -9,15 +11,15 @@ impl World {
     pub fn new() -> Self {
         World { systems: Vec::new()}
     }
-    pub fn add(&mut self, system: System) -> SystemRef {
+    pub fn add(&mut self, system: System, name: String) -> SystemRef {
         let sr = self.systems.len();
         self.systems.push(system);
         self.with_system(sr, |system, _world|{
-            system.add(sr)
+            system.add(sr, name)
         });
         sr
     }
-    pub fn with_system<R, F: FnMut(&mut System, &mut World) -> R>(&mut self, system_ref: SystemRef, mut f:F) -> R {
+    pub fn with_system<R, F: FnOnce(&mut System, &mut World) -> R>(&mut self, system_ref: SystemRef, f:F) -> R {
         let (mut s, mut nw) = self.split(system_ref);
         let r = f(&mut s, &mut nw);
         std::mem::swap(self, &mut nw);
@@ -130,6 +132,10 @@ impl Scheduler {
 
     pub fn get_cur_t(&self) -> i64 {
     	self.cur_t
+    }
+
+    fn reportmetrics(&self) {
+
     }
 }
 
