@@ -11,5 +11,7 @@ rand_distr = "0.4.3"
 num-format = "0.4.3"
 metriki-core = "1.7.4"
 derive_builder = "0.12.0"
-influxdb = "0.5.2"
+influxdb = {version="0.5.2", features=["reqwest"], path="../../influxdb-rust/influxdb"}
 tokio = { version = "1.0", default-features = false, features = ["net", "time"] }
+futures = "0.3.26"
+reqwest= "0.11.14"

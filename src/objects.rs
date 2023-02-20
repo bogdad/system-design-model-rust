@@ -73,20 +73,27 @@ fn cmp(&self, o: &Self) -> std::cmp::Ordering { self.t.cmp(&o.t).reverse()}
 
 use std::collections::BinaryHeap;
 use crate::utils::Counter;
+use tokio::sync::mpsc;
+use crate::influxdbreporter::SimulationReachedTimeEvent;
 pub struct Scheduler {
     heap: BinaryHeap<SchedulerElement>,
     cur_t: i64,
     executed: Counter,
+    event_tx: mpsc::Sender<SimulationReachedTimeEvent>,
 }
 
 impl Scheduler {
 
     pub fn new() -> Self {
         let binary_heap = BinaryHeap::<SchedulerElement>::new();
+        let (tx, rx) = mpsc::channel::<SimulationReachedTimeEvent>(1000);
+        let reporter = InfluxDbReporter::new(rx);
+        reporter.start();
         Scheduler {
             heap: binary_heap,
             cur_t: 0,
             executed: Counter::new(),
+            event_tx: tx,
         }
     }
 
@@ -112,6 +119,7 @@ impl Scheduler {
             if self.cur_t > up_to_nano {
                 false
             } else {
+                self.reportmetrics();
                 let nt = world.with_system(ee.aref, |system, world| -> Option<i64> {
                     system.tick(self, world)
                 });
@@ -135,7 +143,10 @@ impl Scheduler {
     }
 
     fn reportmetrics(&self) {
-
+        futures::executor::block_on(
+        self.event_tx.send(SimulationReachedTimeEvent {
+            time: self.cur_t
+        })).unwrap();
     }
 }
 
