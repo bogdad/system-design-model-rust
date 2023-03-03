@@ -18,6 +18,7 @@ services:
       - DOCKER_INFLUXDB_INIT_PASSWORD=adminadminadmin
       - DOCKER_INFLUXDB_INIT_ORG=noorg
       - DOCKER_INFLUXDB_INIT_BUCKET=grafana
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=secrettokentoken
     volumes:
       - influxdb:/var/lib/influxdb
     networks:

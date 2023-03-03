@@ -56,7 +56,7 @@ impl InfluxDbReporter {
             username: None,
             password: None,
             auth_token: env::var("AUTH_TOKEN").ok(),
-            measurement_prefix: "sdm".to_string(),
+            measurement_prefix: "sdm_".to_string(),
             tags: HashMap::new(),
             batch_size: 60,
             event_rx: event_rx,
@@ -70,7 +70,7 @@ impl InfluxDbReporter {
         if let (Some(username), Some(password)) = (self.username.as_ref(), self.password.as_ref()) {
             client.with_auth(username, password)
         } else if let Some(auth_token) = &self.auth_token {
-            client.with_auth_token(auth_token)
+            client.with_token(auth_token)
         } else {
             client
         }
