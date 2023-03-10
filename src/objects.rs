@@ -85,6 +85,7 @@ pub struct Scheduler {
     cur_t_ns: i64,
     executed: Counter,
     event_tx: mpsc::Sender<SimulationReachedTimeEvent>,
+    reported_cur_t_ns: Option<i64>,
 }
 
 impl Scheduler {
@@ -98,6 +99,7 @@ impl Scheduler {
             cur_t_ns: 0,
             executed: Counter::new(),
             event_tx: tx,
+            reported_cur_t_ns: None,
         }
     }
 
@@ -147,12 +149,16 @@ impl Scheduler {
         self.cur_t_ns
     }
 
-    fn reportmetrics(&self, stop: bool) {
-        futures::executor::block_on(self.event_tx.send(SimulationReachedTimeEvent {
-            time_ns: self.cur_t_ns,
-            stop: stop,
-        }))
-        .unwrap();
+    fn reportmetrics(&mut self, stop: bool) {
+        if self.reported_cur_t_ns.is_none() ||
+            self.cur_t_ns > self.reported_cur_t_ns.unwrap() + 5_000_000_00 {
+            futures::executor::block_on(self.event_tx.send(SimulationReachedTimeEvent {
+                time_ns: self.cur_t_ns,
+                stop: stop,
+            }))
+            .unwrap();
+            self.reported_cur_t_ns = Some(self.cur_t_ns);
+        }
     }
 }
 

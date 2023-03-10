@@ -6,14 +6,14 @@ use rand_distr::Distribution;
 use rand_distr::Poisson;
 
 pub struct ArrivalSource {
-    distribution: Poisson<f64>,
+    distribution: Poisson<f32>,
     sink: SystemRef,
     meter: Meter,
     sr: Option<SystemRef>,
 }
 
 impl ArrivalSource {
-    pub fn new(distribution: Poisson<f64>, sink: SystemRef) -> Self {
+    pub fn new(distribution: Poisson<f32>, sink: SystemRef) -> Self {
         ArrivalSource {
             distribution,
             sink,
@@ -142,7 +142,7 @@ impl StatEmitter for LoadBalancer {
 
 use std::collections::VecDeque;
 pub struct Server {
-    distribution: Poisson<f64>,
+    distribution: Poisson<f32>,
     sink: SystemRef,
     queue: VecDeque<i64>,
     meter: Meter,
@@ -151,7 +151,7 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn new(distribution: Poisson<f64>, sink: SystemRef) -> Self {
+    pub fn new(distribution: Poisson<f32>, sink: SystemRef) -> Self {
         Server {
             distribution,
             sink,

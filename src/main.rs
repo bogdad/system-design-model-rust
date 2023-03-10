@@ -25,10 +25,10 @@ fn main() {
     // 1 000 000 000 = 1 second
     let up_to_nano = 60 * 1_000_000_000;
 
-    let server1 = Server::new(Poisson::<f64>::new(20_000.0).unwrap(), endsink_ref);
+    let server1 = Server::new(Poisson::<f32>::new(20_000.0).unwrap(), endsink_ref);
     let server1_ref = world.add(System::Server(server1), "server1".to_string());
 
-    let server2 = Server::new(Poisson::<f64>::new(20_000.0).unwrap(), endsink_ref);
+    let server2 = Server::new(Poisson::<f32>::new(20_000.0).unwrap(), endsink_ref);
     let server2_ref = world.add(System::Server(server2), "server2".to_string());
 
     let load_balancer = LoadBalancer::new(vec![server1_ref, server2_ref]);
@@ -38,7 +38,7 @@ fn main() {
     );
 
     // 1_000  -> every microsecond a request arives, 1m rps
-    let ar = ArrivalSource::new(Poisson::<f64>::new(1_000.0).unwrap(), load_balancer_ref);
+    let ar = ArrivalSource::new(Poisson::<f32>::new(1_000.0).unwrap(), load_balancer_ref);
     let ar_ref = world.add(System::ArrivalSource(ar), "incomming".to_string());
 
     let mut scheduler = Scheduler::new();
