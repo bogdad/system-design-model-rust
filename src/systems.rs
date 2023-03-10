@@ -1,7 +1,6 @@
-
 use crate::objects::{Scheduler, World};
-use crate::traits::{SystemRef, StatEmitter, Emmitter, WorldMember, Sink, HasQueue};
-use crate::utils::{Counter, Meter, tostring};
+use crate::traits::{Emmitter, HasQueue, Sink, StatEmitter, SystemRef, WorldMember};
+use crate::utils::{tostring, Counter, Meter};
 
 use rand_distr::Distribution;
 use rand_distr::Poisson;
@@ -15,25 +14,28 @@ pub struct ArrivalSource {
 
 impl ArrivalSource {
     pub fn new(distribution: Poisson<f64>, sink: SystemRef) -> Self {
-        ArrivalSource { distribution, sink, meter: Meter::new(), sr: None }
+        ArrivalSource {
+            distribution,
+            sink,
+            meter: Meter::new(),
+            sr: None,
+        }
     }
-    
 }
 
-
 pub struct EndSink {
-    ticks: u32,
+    ticks: Counter,
     sr: Option<SystemRef>,
 }
 
 impl EndSink {
     pub fn new() -> Self {
-        EndSink {ticks: 0, sr: None}
+        EndSink {
+            ticks: Counter::new(),
+            sr: None,
+        }
     }
 }
-
-
-
 
 impl StatEmitter for ArrivalSource {
     fn stats(&self) -> String {
@@ -42,7 +44,8 @@ impl StatEmitter for ArrivalSource {
 }
 
 impl WorldMember for ArrivalSource {
-    fn add(&mut self, system_ref: SystemRef) {
+    fn add(&mut self, system_ref: SystemRef, name: String) {
+        self.meter.name = Some(name + "_meter");
         self.sr = Some(system_ref)
     }
 
@@ -52,13 +55,12 @@ impl WorldMember for ArrivalSource {
 }
 
 impl<'a> Emmitter for ArrivalSource {
-
     fn tick(&mut self, world: &mut World, scheduler: &mut Scheduler) -> Option<i64> {
-        let diff = (self.distribution.sample(&mut rand::thread_rng()) ) as i64;
-        let next_time = scheduler.get_cur_t() +  diff;
+        let diff = (self.distribution.sample(&mut rand::thread_rng())) as i64;
+        let next_time = scheduler.get_cur_t() + diff;
         self.meter.inc(diff);
 
-        world.with_system(self.sink, |system, world|{
+        world.with_system(self.sink, |system, world| {
             system.next(world, scheduler);
         });
         Some(next_time as i64)
@@ -67,13 +69,14 @@ impl<'a> Emmitter for ArrivalSource {
 
 impl StatEmitter for EndSink {
     fn stats(&self) -> String {
-        tostring(self.ticks)
+        format!("processed {}", self.ticks.stats())
     }
 }
 
 impl WorldMember for EndSink {
-    fn add(&mut self, system_ref: SystemRef) {
-        self.sr = Some(system_ref);
+    fn add(&mut self, system_ref: SystemRef, name: String) {
+        self.ticks.name = Some(name + "_ticks");
+        self.sr = Some(system_ref)
     }
 
     fn getref(&self) -> Option<SystemRef> {
@@ -82,49 +85,8 @@ impl WorldMember for EndSink {
 }
 
 impl Sink for EndSink {
-
     fn next(&mut self, _world: &mut World, _scheduler: &mut Scheduler) {
-        self.ticks += 1;
-    }
-}
-
-
-impl WorldMember for Server {
-    fn add(&mut self, system_ref: SystemRef) {
-        self.sr = Some(system_ref);
-    }
-
-    fn getref(&self) -> Option<SystemRef> {
-        self.sr
-    }
-}
-
-impl<'a> Emmitter for Server {
-
-    fn tick(&mut self, world: &mut World, scheduler: &mut Scheduler) -> Option<i64> {
-        let _ob = self.queue.front().cloned();
-        self.queue.pop_front();
-        world.with_system(self.sink, |system, world|{system.next(world, scheduler)});
-        let _nb = self.queue.front();
-        self.queue.front().cloned()
-    }
-}
-
-impl Sink for Server {
-    fn next(&mut self, _world: &mut World, scheduler: &mut Scheduler) {
-        let next_time = (self.distribution.sample(&mut rand::thread_rng())) as i64;
-        if self.queue.is_empty() {
-            let nt = scheduler.get_cur_t() + next_time;
-            self.queue.push_back(nt);
-
-            scheduler.schedule_at(nt, self.getref().unwrap());
-        } else {
-            let top = self.queue.back();
-            let nt = top.unwrap() + next_time;
-            self.queue.push_back(nt);
-        }
-        self.meter.inc(next_time);
-        self.counter.inc();
+        self.ticks.inc()
     }
 }
 
@@ -140,13 +102,19 @@ pub struct LoadBalancer {
 impl LoadBalancer {
     pub fn new(sinks: Vec<SystemRef>) -> Self {
         assert!(sinks.len() > 0);
-        LoadBalancer { sinks, sr: None, counter: Counter::new(), cur: 0 }
+        LoadBalancer {
+            sinks,
+            sr: None,
+            counter: Counter::new(),
+            cur: 0,
+        }
     }
 }
 
 impl WorldMember for LoadBalancer {
-    fn add(&mut self, system_ref: SystemRef) {
-        self.sr = Some(system_ref);
+    fn add(&mut self, system_ref: SystemRef, name: String) {
+        self.counter.name = Some(name + "_counter");
+        self.sr = Some(system_ref)
     }
 
     fn getref(&self) -> Option<SystemRef> {
@@ -172,7 +140,6 @@ impl StatEmitter for LoadBalancer {
     }
 }
 
-
 use std::collections::VecDeque;
 pub struct Server {
     distribution: Poisson<f64>,
@@ -195,10 +162,33 @@ impl Server {
         }
     }
 }
+
+impl Sink for Server {
+    fn next(&mut self, _world: &mut World, scheduler: &mut Scheduler) {
+        let next_time = (self.distribution.sample(&mut rand::thread_rng())) as i64;
+        if self.queue.is_empty() {
+            let nt = scheduler.get_cur_t() + next_time;
+            self.queue.push_back(nt);
+
+            scheduler.schedule_at(nt, self.getref().unwrap());
+        } else {
+            let top = self.queue.back();
+            let nt = top.unwrap() + next_time;
+            self.queue.push_back(nt);
+        }
+        self.meter.inc(next_time);
+        self.counter.inc();
+    }
+}
+
 impl StatEmitter for Server {
     fn stats(&self) -> String {
-        format!("meter {} queue {} counter {}", self.meter.stats(), 
-            tostring(self.queue.len()), self.counter.stats())
+        format!(
+            "meter {} queue {} counter {}",
+            self.meter.stats(),
+            tostring(self.queue.len()),
+            self.counter.stats()
+        )
     }
 }
 
@@ -208,6 +198,26 @@ impl HasQueue for Server {
     }
 }
 
+impl WorldMember for Server {
+    fn add(&mut self, system_ref: SystemRef, name: String) {
+        self.meter.name = Some(name + "_meter");
+        self.sr = Some(system_ref);
+    }
+
+    fn getref(&self) -> Option<SystemRef> {
+        self.sr
+    }
+}
+
+impl<'a> Emmitter for Server {
+    fn tick(&mut self, world: &mut World, scheduler: &mut Scheduler) -> Option<i64> {
+        let _ob = self.queue.front().cloned();
+        self.queue.pop_front();
+        world.with_system(self.sink, |system, world| system.next(world, scheduler));
+        let _nb = self.queue.front();
+        self.queue.front().cloned()
+    }
+}
 
 pub enum System {
     Unset,
@@ -229,13 +239,13 @@ impl System {
     }
 
     pub fn next(&mut self, world: &mut World, scheduler: &mut Scheduler) {
-            match self {
-                System::EndSink(es) => es.next(world, scheduler),
-                System::Server(sr) => sr.next(world, scheduler),
-                System::ArrivalSource(_ars) => unimplemented!(),
-                System::Unset => unimplemented!(),
-                System::LoadBalancer(lb) => lb.next(world, scheduler),
-            }
+        match self {
+            System::EndSink(es) => es.next(world, scheduler),
+            System::Server(sr) => sr.next(world, scheduler),
+            System::ArrivalSource(_ars) => unimplemented!(),
+            System::Unset => unimplemented!(),
+            System::LoadBalancer(lb) => lb.next(world, scheduler),
+        }
     }
 
     pub fn queue_size(&self) -> i64 {
@@ -250,7 +260,7 @@ impl System {
 }
 
 impl StatEmitter for System {
-	fn stats(&self) -> String {
+    fn stats(&self) -> String {
         match self {
             System::EndSink(es) => es.stats(),
             System::Server(sr) => sr.stats(),
@@ -262,13 +272,13 @@ impl StatEmitter for System {
 }
 
 impl WorldMember for System {
-    fn add(&mut self, system_ref: SystemRef) {
+    fn add(&mut self, system_ref: SystemRef, name: String) {
         match self {
-            System::EndSink(endsink) => endsink.add(system_ref),
-            System::Server(sv) => sv.add(system_ref),
-            System::ArrivalSource(arrival_source) => arrival_source.add(system_ref),
+            System::EndSink(endsink) => endsink.add(system_ref, name),
+            System::Server(sv) => sv.add(system_ref, name),
+            System::ArrivalSource(arrival_source) => arrival_source.add(system_ref, name),
             System::Unset => unimplemented!(),
-            System::LoadBalancer(lb) => lb.add(system_ref),
+            System::LoadBalancer(lb) => lb.add(system_ref, name),
         }
     }
 
@@ -282,4 +292,3 @@ impl WorldMember for System {
         }
     }
 }
-

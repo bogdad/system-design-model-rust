@@ -1,5 +1,7 @@
-use crate::traits::{SystemRef, StatEmitter, WorldMember, HasQueue};
 use crate::systems::System;
+use crate::traits::{HasQueue, StatEmitter, SystemRef, WorldMember};
+
+use crate::influxdbreporter::InfluxDbReporter;
 
 pub struct World {
     systems: Vec<System>,
@@ -7,17 +9,21 @@ pub struct World {
 
 impl World {
     pub fn new() -> Self {
-        World { systems: Vec::new()}
+        World {
+            systems: Vec::new(),
+        }
     }
-    pub fn add(&mut self, system: System) -> SystemRef {
+    pub fn add(&mut self, system: System, name: String) -> SystemRef {
         let sr = self.systems.len();
         self.systems.push(system);
-        self.with_system(sr, |system, _world|{
-            system.add(sr)
-        });
+        self.with_system(sr, |system, _world| system.add(sr, name));
         sr
     }
-    pub fn with_system<R, F: FnMut(&mut System, &mut World) -> R>(&mut self, system_ref: SystemRef, mut f:F) -> R {
+    pub fn with_system<R, F: FnOnce(&mut System, &mut World) -> R>(
+        &mut self,
+        system_ref: SystemRef,
+        f: F,
+    ) -> R {
         let (mut s, mut nw) = self.split(system_ref);
         let r = f(&mut s, &mut nw);
         std::mem::swap(self, &mut nw);
@@ -30,9 +36,7 @@ impl World {
         std::mem::swap(&mut unset, self.systems.get_mut(system_ref).unwrap());
         let mut nsystems = vec![];
         std::mem::swap(&mut nsystems, &mut self.systems);
-        let nw = World {
-            systems: nsystems
-        };
+        let nw = World { systems: nsystems };
         (unset, nw)
     }
 }
@@ -47,7 +51,6 @@ impl HasQueue for World {
     }
 }
 
-
 struct EmitterRef {
     aref: SystemRef,
 }
@@ -57,39 +60,49 @@ struct SchedulerElement {
     e: EmitterRef,
 }
 impl PartialEq for SchedulerElement {
-fn eq(&self, o: &Self) -> bool { self.t == o.t }
+    fn eq(&self, o: &Self) -> bool {
+        self.t == o.t
+    }
 }
-impl Eq for SchedulerElement {
-}
+impl Eq for SchedulerElement {}
 impl PartialOrd for SchedulerElement {
-fn partial_cmp(&self, o: &Self) -> Option<std::cmp::Ordering> { self.t.partial_cmp(&o.t).map(|e|{e.reverse()})}
+    fn partial_cmp(&self, o: &Self) -> Option<std::cmp::Ordering> {
+        self.t.partial_cmp(&o.t).map(|e| e.reverse())
+    }
 }
 impl Ord for SchedulerElement {
-
-fn cmp(&self, o: &Self) -> std::cmp::Ordering { self.t.cmp(&o.t).reverse()}
+    fn cmp(&self, o: &Self) -> std::cmp::Ordering {
+        self.t.cmp(&o.t).reverse()
+    }
 }
 
-use std::collections::BinaryHeap;
+use crate::influxdbreporter::SimulationReachedTimeEvent;
 use crate::utils::Counter;
+use std::collections::BinaryHeap;
+use tokio::sync::mpsc;
 pub struct Scheduler {
     heap: BinaryHeap<SchedulerElement>,
-    cur_t: i64,
+    cur_t_ns: i64,
     executed: Counter,
+    event_tx: mpsc::Sender<SimulationReachedTimeEvent>,
 }
 
 impl Scheduler {
-
     pub fn new() -> Self {
         let binary_heap = BinaryHeap::<SchedulerElement>::new();
+        let (tx, rx) = mpsc::channel::<SimulationReachedTimeEvent>(1_000_000);
+        let reporter = InfluxDbReporter::new(rx);
+        reporter.start();
         Scheduler {
             heap: binary_heap,
-            cur_t: 0,
+            cur_t_ns: 0,
             executed: Counter::new(),
+            event_tx: tx,
         }
     }
 
     pub fn schedule(&mut self, world: &mut World, emitter: SystemRef) {
-        world.with_system(emitter, |system, world|{
+        world.with_system(emitter, |system, world| {
             let nt = system.tick(self, world);
             if let Some(nt) = nt {
                 self.schedule_at(nt, emitter);
@@ -98,7 +111,10 @@ impl Scheduler {
     }
 
     pub fn schedule_at(&mut self, t: i64, emitter: SystemRef) {
-    	self.heap.push(SchedulerElement { t, e: EmitterRef{aref: emitter}});
+        self.heap.push(SchedulerElement {
+            t,
+            e: EmitterRef { aref: emitter },
+        });
     }
 
     pub fn execute_next(&mut self, world: &mut World, up_to_nano: i64) -> bool {
@@ -106,18 +122,17 @@ impl Scheduler {
         if let Some(top) = top {
             self.executed.inc();
             let ee = top.e;
-            self.cur_t = top.t;
-            if self.cur_t > up_to_nano {
+            self.cur_t_ns = top.t;
+            if self.cur_t_ns >= up_to_nano {
+                self.reportmetrics(true);
                 false
             } else {
+                self.reportmetrics(false);
                 let nt = world.with_system(ee.aref, |system, world| -> Option<i64> {
                     system.tick(self, world)
                 });
                 if let Some(nt) = nt {
-                    self.heap.push(SchedulerElement {
-                        t: nt,
-                        e: ee
-                    });
+                    self.heap.push(SchedulerElement { t: nt, e: ee });
                     true
                 } else {
                     self.heap.len() > 0
@@ -129,7 +144,15 @@ impl Scheduler {
     }
 
     pub fn get_cur_t(&self) -> i64 {
-    	self.cur_t
+        self.cur_t_ns
+    }
+
+    fn reportmetrics(&self, stop: bool) {
+        futures::executor::block_on(self.event_tx.send(SimulationReachedTimeEvent {
+            time_ns: self.cur_t_ns,
+            stop: stop,
+        }))
+        .unwrap();
     }
 }
 
